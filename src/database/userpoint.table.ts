@@ -1,49 +1,48 @@
 import { Injectable } from "@nestjs/common";
-import { randomInt } from "crypto";
-import { UserPoint } from "src/point/point.model";
+import { UserPoint } from "../point/point.model";
 
 /**
  * 해당 Table 클래스는 변경하지 않고 공개된 API 만을 사용해 데이터를 제어합니다.
  */
 @Injectable()
 export class UserPointTable {
-    private readonly table: Map<number, UserPoint> = new Map()
+    private readonly table: Record<number, UserPoint> = {};
 
-    selectById(id: number): Promise<UserPoint> {
-        this.isValidId(id)
-        return new Promise((r) => 
-            setTimeout(() => {
-                r(this.table.get(id) ?? { id: id, point: 0, updateMillis: Date.now() })
-            }, randomInt(200))
-        )
-    }
-    
-    insertOrUpdate(id: number, amount: number): Promise<UserPoint> {
-        this.isValidId(id)
-        return new Promise((r) =>
-            setTimeout(() => {
-                console.log(`포인트 : ${amount}`)
-                const userPoint = { id: id, point: amount, updateMillis: Date.now() }
-                this.table.set(id, userPoint)
-                r(userPoint)
-            }, randomInt(300))
-        )
-    }
-    
     async findByUserId(userId: number): Promise<UserPoint> {
-        throw new Error('Method not implemented.');
+        const userPoint = this.table[userId];
+        if (userPoint) {
+            return userPoint;
+        }
+        
+        // 새 유저인 경우 0 포인트로 초기화
+        const newUserPoint: UserPoint = {
+            id: userId,
+            point: 0,
+            updateMillis: Date.now(),
+        };
+        this.table[userId] = newUserPoint;
+        return newUserPoint;
     }
 
     async incrementPoint(userId: number, amount: number): Promise<UserPoint> {
-        throw new Error('Method not implemented.');
+        const currentPoint = await this.findByUserId(userId);
+        const updatedPoint: UserPoint = {
+            id: userId,
+            point: currentPoint.point + amount,
+            updateMillis: Date.now(),
+        };
+        this.table[userId] = updatedPoint;
+        return updatedPoint;
     }
 
     async decrementPoint(userId: number, amount: number): Promise<UserPoint> {
-        throw new Error('Method not implemented.');
-    }
-
-    private isValidId(id: number) {
-        if (Number.isInteger(id) && id > 0) return
-        throw new Error("올바르지 않은 ID 값 입니다.")
+        const currentPoint = await this.findByUserId(userId);
+        const updatedPoint: UserPoint = {
+            id: userId,
+            point: currentPoint.point - amount,
+            updateMillis: Date.now(),
+        };
+        this.table[userId] = updatedPoint;
+        return updatedPoint;
     }
 }
