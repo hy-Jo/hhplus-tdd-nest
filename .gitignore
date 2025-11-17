@@ -1,6 +1,10 @@
 # compiled output
 /dist
 /node_modules
+
+# Package files
+package-lock.json
+yarn.lock
 pnpm-lock.yaml
 
 # Logs

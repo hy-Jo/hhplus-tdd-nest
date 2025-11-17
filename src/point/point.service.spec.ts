@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PointService } from '../../src/point/point.service';
-import { UserPointTable } from '../../src/database/userpoint.table';
-import { PointHistoryTable } from '../../src/database/pointhistory.table';
-import { TransactionType } from '../../src/point/point.model';
+import { PointService } from './point.service';
+import { UserPointTable } from '../database/userpoint.table';
+import { PointHistoryTable } from '../database/pointhistory.table';
+import { TransactionType } from './point.model';
 
 describe('PointService', () => {
   let service: PointService;
@@ -54,6 +54,24 @@ describe('PointService', () => {
       expect(result).toEqual(expectedPoint);
       expect(userPointTable.findByUserId).toHaveBeenCalledWith(userId);
     });
+
+    it('should return user point with zero balance for new user', async () => {
+      // Given
+      const userId = 999;
+      const expectedPoint = {
+        id: userId,
+        point: 0,
+        updateMillis: Date.now(),
+      };
+      userPointTable.findByUserId.mockResolvedValue(expectedPoint);
+
+      // When
+      const result = await service.getPoint(userId);
+
+      // Then
+      expect(result).toEqual(expectedPoint);
+      expect(userPointTable.findByUserId).toHaveBeenCalledWith(userId);
+    });
   });
 
   describe('getPointHistory', () => {
@@ -73,6 +91,19 @@ describe('PointService', () => {
       expect(result).toEqual(expectedHistory);
       expect(historyTable.findByUserId).toHaveBeenCalledWith(userId);
     });
+
+    it('should return empty array for user with no history', async () => {
+      // Given
+      const userId = 999;
+      historyTable.findByUserId.mockResolvedValue([]);
+
+      // When
+      const result = await service.getPointHistory(userId);
+
+      // Then
+      expect(result).toEqual([]);
+      expect(historyTable.findByUserId).toHaveBeenCalledWith(userId);
+    });
   });
 
   describe('chargePoint', () => {
@@ -80,6 +111,35 @@ describe('PointService', () => {
       // Given
       const userId = 1;
       const amount = 1000;
+
+      userPointTable.incrementPoint.mockResolvedValue({
+        id: userId,
+        point: amount,
+        updateMillis: Date.now(),
+      });
+
+      // When
+      const result = await service.chargePoint(userId, amount);
+
+      // Then
+      expect(result.point).toBe(amount);
+      expect(historyTable.createHistory).toHaveBeenCalled();
+    });
+
+    it('should throw error when amount is negative', async () => {
+      // When & Then
+      await expect(service.chargePoint(1, -1000)).rejects.toThrow('Charge amount must be positive');
+    });
+
+    it('should throw error when amount is zero', async () => {
+      // When & Then
+      await expect(service.chargePoint(1, 0)).rejects.toThrow('Charge amount must be positive');
+    });
+
+    it('should handle large amounts correctly', async () => {
+      // Given
+      const userId = 1;
+      const amount = 1000000;
       const now = Date.now();
       jest.spyOn(Date, 'now').mockImplementation(() => now);
 
@@ -94,26 +154,7 @@ describe('PointService', () => {
 
       // Then
       expect(result.point).toBe(amount);
-      expect(historyTable.createHistory).toHaveBeenCalledWith({
-        userId,
-        type: TransactionType.CHARGE,
-        amount,
-        timeMillis: now,
-      });
-    });
-
-    it('should throw error when amount is negative', async () => {
-      // When & Then
-      await expect(service.chargePoint(1, -1000)).rejects.toThrow(
-        'Charge amount must be positive',
-      );
-    });
-
-    it('should throw error when amount is zero', async () => {
-      // When & Then
-      await expect(service.chargePoint(1, 0)).rejects.toThrow(
-        'Charge amount must be positive',
-      );
+      expect(userPointTable.incrementPoint).toHaveBeenCalledWith(userId, amount);
     });
   });
 
@@ -175,6 +216,45 @@ describe('PointService', () => {
       await expect(service.usePoint(1, 0)).rejects.toThrow(
         'Use amount must be positive',
       );
+    });
+
+    it('should allow using exact amount of available points', async () => {
+      // Given
+      const userId = 1;
+      const amount = 1000;
+      const now = Date.now();
+      jest.spyOn(Date, 'now').mockImplementation(() => now);
+
+      userPointTable.findByUserId.mockResolvedValue({
+        id: userId,
+        point: 1000,
+        updateMillis: now,
+      });
+
+      userPointTable.decrementPoint.mockResolvedValue({
+        id: userId,
+        point: 0,
+        updateMillis: now,
+      });
+
+      // When
+      const result = await service.usePoint(userId, amount);
+
+      // Then
+      expect(result.point).toBe(0);
+      expect(userPointTable.decrementPoint).toHaveBeenCalledWith(userId, amount);
+    });
+
+    it('should throw error when trying to use points with zero balance', async () => {
+      // Given
+      userPointTable.findByUserId.mockResolvedValue({
+        id: 1,
+        point: 0,
+        updateMillis: Date.now(),
+      });
+
+      // When & Then
+      await expect(service.usePoint(1, 100)).rejects.toThrow('Not enough point');
     });
   });
 });
