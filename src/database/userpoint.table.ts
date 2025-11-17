@@ -30,6 +30,17 @@ export class UserPointTable {
         )
     }
     
+    async findByUserId(userId: number): Promise<UserPoint> {
+        throw new Error('Method not implemented.');
+    }
+
+    async incrementPoint(userId: number, amount: number): Promise<UserPoint> {
+        throw new Error('Method not implemented.');
+    }
+
+    async decrementPoint(userId: number, amount: number): Promise<UserPoint> {
+        throw new Error('Method not implemented.');
+    }
 
     private isValidId(id: number) {
         if (Number.isInteger(id) && id > 0) return

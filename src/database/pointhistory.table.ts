@@ -36,4 +36,12 @@ export class PointHistoryTable {
             r(this.table.filter((v) => v.userId == userId))
         })
     }
+
+    async findByUserId(userId: number): Promise<PointHistory[]> {
+        throw new Error('Method not implemented.');
+    }
+
+    async createHistory(history: Omit<PointHistory, 'id'>): Promise<PointHistory> {
+        throw new Error('Method not implemented.');
+    }
 }

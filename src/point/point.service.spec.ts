@@ -6,8 +6,8 @@ import { TransactionType } from './point.model';
 
 describe('PointService', () => {
   let service: PointService;
-  let userPointTable: jest.Mocked<UserPointTable>;
-  let historyTable: jest.Mocked<PointHistoryTable>;
+  let userPointTable: any;
+  let historyTable: any;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
