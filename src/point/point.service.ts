@@ -11,11 +11,11 @@ export class PointService {
   ) {}
 
   async getPoint(userId: number): Promise<UserPoint> {
-    return await this.userPointTable.findByUserId(userId);
+    return await this.userPointTable.selectById(userId);
   }
 
   async getPointHistory(userId: number): Promise<PointHistory[]> {
-    return await this.pointHistoryTable.findByUserId(userId);
+    return await this.pointHistoryTable.selectAllByUserId(userId);
   }
 
   async chargePoint(userId: number, amount: number): Promise<UserPoint> {
@@ -23,14 +23,18 @@ export class PointService {
       throw new Error('Charge amount must be positive');
     }
 
-    const updatedPoint = await this.userPointTable.incrementPoint(userId, amount);
-    
-    await this.pointHistoryTable.createHistory({
+    const currentPoint = await this.userPointTable.selectById(userId);
+    const updatedPoint = await this.userPointTable.insertOrUpdate(
       userId,
-      type: TransactionType.CHARGE,
+      currentPoint.point + amount
+    );
+    
+    await this.pointHistoryTable.insert(
+      userId,
       amount,
-      timeMillis: Date.now(),
-    });
+      TransactionType.CHARGE,
+      Date.now()
+    );
 
     return updatedPoint;
   }
@@ -40,20 +44,23 @@ export class PointService {
       throw new Error('Use amount must be positive');
     }
 
-    const currentPoint = await this.userPointTable.findByUserId(userId);
+    const currentPoint = await this.userPointTable.selectById(userId);
     
     if (currentPoint.point < amount) {
       throw new Error('Not enough point');
     }
 
-    const updatedPoint = await this.userPointTable.decrementPoint(userId, amount);
-    
-    await this.pointHistoryTable.createHistory({
+    const updatedPoint = await this.userPointTable.insertOrUpdate(
       userId,
-      type: TransactionType.USE,
+      currentPoint.point - amount
+    );
+    
+    await this.pointHistoryTable.insert(
+      userId,
       amount,
-      timeMillis: Date.now(),
-    });
+      TransactionType.USE,
+      Date.now()
+    );
 
     return updatedPoint;
   }

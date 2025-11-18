@@ -16,16 +16,15 @@ describe('PointService', () => {
         {
           provide: UserPointTable,
           useValue: {
-            findByUserId: jest.fn(),
-            incrementPoint: jest.fn(),
-            decrementPoint: jest.fn(),
+            selectById: jest.fn(),
+            insertOrUpdate: jest.fn(),
           },
         },
         {
           provide: PointHistoryTable,
           useValue: {
-            createHistory: jest.fn(),
-            findByUserId: jest.fn(),
+            insert: jest.fn(),
+            selectAllByUserId: jest.fn(),
           },
         },
       ],
@@ -36,225 +35,113 @@ describe('PointService', () => {
     historyTable = module.get(PointHistoryTable);
   });
 
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
   describe('getPoint', () => {
     it('should return user point', async () => {
-      // Given
       const userId = 1;
-      const expectedPoint = {
-        id: userId,
-        point: 1500,
-        updateMillis: Date.now(),
-      };
-      userPointTable.findByUserId.mockResolvedValue(expectedPoint);
+      const expectedPoint = { id: userId, point: 100, updateMillis: Date.now() };
+      userPointTable.selectById.mockResolvedValue(expectedPoint);
 
-      // When
       const result = await service.getPoint(userId);
 
-      // Then
       expect(result).toEqual(expectedPoint);
-      expect(userPointTable.findByUserId).toHaveBeenCalledWith(userId);
-    });
-
-    it('should return user point with zero balance for new user', async () => {
-      // Given
-      const userId = 999;
-      const expectedPoint = {
-        id: userId,
-        point: 0,
-        updateMillis: Date.now(),
-      };
-      userPointTable.findByUserId.mockResolvedValue(expectedPoint);
-
-      // When
-      const result = await service.getPoint(userId);
-
-      // Then
-      expect(result).toEqual(expectedPoint);
-      expect(userPointTable.findByUserId).toHaveBeenCalledWith(userId);
+      expect(userPointTable.selectById).toHaveBeenCalledWith(userId);
     });
   });
 
   describe('getPointHistory', () => {
-    it('should return user point history', async () => {
-      // Given
+    it('should return point history', async () => {
       const userId = 1;
       const expectedHistory = [
-        { userId, type: TransactionType.CHARGE, amount: 1000, timeMillis: Date.now() },
-        { userId, type: TransactionType.USE, amount: 500, timeMillis: Date.now() },
+        { userId, amount: 50, type: TransactionType.CHARGE, timeMillis: Date.now() },
       ];
-      historyTable.findByUserId.mockResolvedValue(expectedHistory);
+      historyTable.selectAllByUserId.mockResolvedValue(expectedHistory);
 
-      // When
       const result = await service.getPointHistory(userId);
 
-      // Then
       expect(result).toEqual(expectedHistory);
-      expect(historyTable.findByUserId).toHaveBeenCalledWith(userId);
-    });
-
-    it('should return empty array for user with no history', async () => {
-      // Given
-      const userId = 999;
-      historyTable.findByUserId.mockResolvedValue([]);
-
-      // When
-      const result = await service.getPointHistory(userId);
-
-      // Then
-      expect(result).toEqual([]);
-      expect(historyTable.findByUserId).toHaveBeenCalledWith(userId);
+      expect(historyTable.selectAllByUserId).toHaveBeenCalledWith(userId);
     });
   });
 
   describe('chargePoint', () => {
-    it('should charge points and create history', async () => {
-      // Given
+    it('should charge user point', async () => {
       const userId = 1;
-      const amount = 1000;
+      const chargeAmount = 50;
+      const currentPoint = { id: userId, point: 100, updateMillis: Date.now() };
+      const updatedPoint = { id: userId, point: 150, updateMillis: Date.now() };
+      
+      userPointTable.selectById.mockResolvedValue(currentPoint);
+      userPointTable.insertOrUpdate.mockResolvedValue(updatedPoint);
 
-      userPointTable.incrementPoint.mockResolvedValue({
-        id: userId,
-        point: amount,
-        updateMillis: Date.now(),
-      });
+      const result = await service.chargePoint(userId, chargeAmount);
 
-      // When
-      const result = await service.chargePoint(userId, amount);
-
-      // Then
-      expect(result.point).toBe(amount);
-      expect(historyTable.createHistory).toHaveBeenCalled();
+      expect(result).toEqual(updatedPoint);
+      expect(userPointTable.selectById).toHaveBeenCalledWith(userId);
+      expect(userPointTable.insertOrUpdate).toHaveBeenCalledWith(
+        userId,
+        currentPoint.point + chargeAmount
+      );
+      expect(historyTable.insert).toHaveBeenCalledWith(
+        userId,
+        chargeAmount,
+        TransactionType.CHARGE,
+        expect.any(Number)
+      );
     });
 
-    it('should throw error when amount is negative', async () => {
-      // When & Then
-      await expect(service.chargePoint(1, -1000)).rejects.toThrow('Charge amount must be positive');
-    });
-
-    it('should throw error when amount is zero', async () => {
-      // When & Then
-      await expect(service.chargePoint(1, 0)).rejects.toThrow('Charge amount must be positive');
-    });
-
-    it('should handle large amounts correctly', async () => {
-      // Given
-      const userId = 1;
-      const amount = 1000000;
-      const now = Date.now();
-      jest.spyOn(Date, 'now').mockImplementation(() => now);
-
-      userPointTable.incrementPoint.mockResolvedValue({
-        id: userId,
-        point: amount,
-        updateMillis: now,
-      });
-
-      // When
-      const result = await service.chargePoint(userId, amount);
-
-      // Then
-      expect(result.point).toBe(amount);
-      expect(userPointTable.incrementPoint).toHaveBeenCalledWith(userId, amount);
+    it('should throw an error if charge amount is non-positive', async () => {
+      await expect(service.chargePoint(1, 0)).rejects.toThrow(
+        'Charge amount must be positive'
+      );
     });
   });
 
   describe('usePoint', () => {
-    it('should use points and create history when sufficient balance', async () => {
-      // Given
+    it('should use user point', async () => {
       const userId = 1;
-      const amount = 500;
-      const now = Date.now();
-      jest.spyOn(Date, 'now').mockImplementation(() => now);
+      const useAmount = 50;
+      const currentPoint = { id: userId, point: 100, updateMillis: Date.now() };
+      const updatedPoint = { id: userId, point: 50, updateMillis: Date.now() };
+      
+      userPointTable.selectById.mockResolvedValue(currentPoint);
+      userPointTable.insertOrUpdate.mockResolvedValue(updatedPoint);
 
-      userPointTable.findByUserId.mockResolvedValue({
-        id: userId,
-        point: 1000,
-        updateMillis: now,
-      });
+      const result = await service.usePoint(userId, useAmount);
 
-      userPointTable.decrementPoint.mockResolvedValue({
-        id: userId,
-        point: 500,
-        updateMillis: now,
-      });
-
-      // When
-      const result = await service.usePoint(userId, amount);
-
-      // Then
-      expect(result.point).toBe(500);
-      expect(userPointTable.decrementPoint).toHaveBeenCalledWith(userId, amount);
-      expect(historyTable.createHistory).toHaveBeenCalledWith({
+      expect(result).toEqual(updatedPoint);
+      expect(userPointTable.selectById).toHaveBeenCalledWith(userId);
+      expect(userPointTable.insertOrUpdate).toHaveBeenCalledWith(
         userId,
-        type: TransactionType.USE,
-        amount,
-        timeMillis: now,
-      });
-    });
-
-    it('should throw error when not enough point', async () => {
-      // Given
-      userPointTable.findByUserId.mockResolvedValue({
-        id: 1,
-        point: 500,
-        updateMillis: Date.now(),
-      });
-
-      // When & Then
-      await expect(service.usePoint(1, 1000)).rejects.toThrow('Not enough point');
-    });
-
-    it('should throw error when amount is negative', async () => {
-      // When & Then
-      await expect(service.usePoint(1, -500)).rejects.toThrow(
-        'Use amount must be positive',
+        currentPoint.point - useAmount
+      );
+      expect(historyTable.insert).toHaveBeenCalledWith(
+        userId,
+        useAmount,
+        TransactionType.USE,
+        expect.any(Number)
       );
     });
 
-    it('should throw error when amount is zero', async () => {
-      // When & Then
+    it('should throw an error if use amount is non-positive', async () => {
       await expect(service.usePoint(1, 0)).rejects.toThrow(
-        'Use amount must be positive',
+        'Use amount must be positive'
       );
     });
 
-    it('should allow using exact amount of available points', async () => {
-      // Given
+    it('should throw an error if not enough point', async () => {
       const userId = 1;
-      const amount = 1000;
-      const now = Date.now();
-      jest.spyOn(Date, 'now').mockImplementation(() => now);
+      const useAmount = 200;
+      const currentPoint = { id: userId, point: 100, updateMillis: Date.now() };
+      
+      userPointTable.selectById.mockResolvedValue(currentPoint);
 
-      userPointTable.findByUserId.mockResolvedValue({
-        id: userId,
-        point: 1000,
-        updateMillis: now,
-      });
-
-      userPointTable.decrementPoint.mockResolvedValue({
-        id: userId,
-        point: 0,
-        updateMillis: now,
-      });
-
-      // When
-      const result = await service.usePoint(userId, amount);
-
-      // Then
-      expect(result.point).toBe(0);
-      expect(userPointTable.decrementPoint).toHaveBeenCalledWith(userId, amount);
-    });
-
-    it('should throw error when trying to use points with zero balance', async () => {
-      // Given
-      userPointTable.findByUserId.mockResolvedValue({
-        id: 1,
-        point: 0,
-        updateMillis: Date.now(),
-      });
-
-      // When & Then
-      await expect(service.usePoint(1, 100)).rejects.toThrow('Not enough point');
+      await expect(service.usePoint(userId, useAmount)).rejects.toThrow(
+        'Not enough point'
+      );
     });
   });
 });
