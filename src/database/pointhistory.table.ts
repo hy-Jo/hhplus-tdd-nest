@@ -10,21 +10,6 @@ export class PointHistoryTable {
     private readonly table: PointHistory[] = []
     private cursor = 1
 
-    // 기존 메서드들은 유지하되, 테스트에서 사용하는 메서드들을 실제로 구현
-    async findByUserId(userId: number): Promise<PointHistory[]> {
-        return this.selectAllByUserId(userId);
-    }
-
-    async createHistory(history: Omit<PointHistory, 'id'>): Promise<PointHistory> {
-        return this.insert(
-            history.userId,
-            history.amount,
-            history.type,
-            history.timeMillis
-        );
-    }
-
-    // 기존 메서드들
     insert(
         userId: number,
         amount: number,
